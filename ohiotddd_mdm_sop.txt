@@ -1,0 +1,29 @@
+spark.sql("""create table all_all_r_all_bkp.idl_mdm_consent_02212021 like ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent""")
+
+spark.sql("""set hive.exec.dynamic.partition.mode=nonstrict""")
+
+spark.sql("""insert into all_all_r_all_bkp.idl_mdm_consent_02212021 select * from ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent""")
+
+spark.sql("""truncate table ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent_temp""")
+
+val rule1=spark.sql("SELECT  case when month(dateexemptformsigned) > 3  then concat('03/31/',cast(year(dateexemptformsigned)as int)+1) else concat('03/31/',year(dateexemptformsigned)) end  as issue_expiration_date FROM (select max(TO_DATE(CAST(UNIX_TIMESTAMP(dateexemptformsigned, 'MM/dd/yyyy') AS TIMESTAMP))) dateexemptformsigned FROM ALL_ALL_B_USA_CRMODS.ods_mdm_tddd_exemp_consent)")
+rule1.createOrReplaceTempView("df_exp_date")
+
+val rule2=spark.sql("select * from ALL_ALL_B_USA_CRMODS.ods_mdm_tddd_exemp_consent ods left anti join all_all_e_gbl_customer.idl_mdm_consent idl on ods.address_id=idl.address_id and ods.mdmid=idl.customer_id where ods.address_id is not null")
+rule2.createOrReplaceTempView("incremental_active_vw")
+
+val rule3=spark.sql("SELECT mdmid,address_id,date_of_consent,batch_id_insert,batch_id_update,status,rec_modify_date, rec_insert_date FROM (select odw_id, repempid, repname, dateexemptformsigned, hcpname, hcpsln, hcpaddresssuite, hcpcity, hcpstate, hcpzipcode, mdmid, address_id, npinumber, comments, batch_id_insert, batch_id_update, rec_insert_by, rec_insert_date, rec_modify_by, rec_modify_date, status,MAX(CAST(UNIX_TIMESTAMP(datesareceivedtdddexemptform, 'MM/dd/yyyy') AS TIMESTAMP)) as date_of_consent FROM incremental_active_vw group by odw_id, repempid, repname, dateexemptformsigned, hcpname, hcpsln, hcpaddresssuite, hcpcity, hcpstate, hcpzipcode, mdmid, address_id, npinumber, comments, batch_id_insert, batch_id_update, rec_insert_by, rec_insert_date, rec_modify_by, rec_modify_date, status)")
+rule3.createOrReplaceTempView("incr_active_updt_vw")
+
+val rule4=spark.sql("INSERT INTO ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent_temp SELECT  NULL consent_id ,'OHTDDD_EXEMPTION' type ,'N/A' value ,status ,MDMID customer_id ,address_id ,'USA' country ,NULL is_global ,date_of_consent ,cast(UNIX_TIMESTAMP(issue_expiration_date, 'MM/dd/yyyy') as timestamp) issue_expiration_date ,NULL brand ,NULL product_id ,NULL consent_defintion ,batch_id_insert ,batch_id_update ,'VNTG' rec_insert_by ,'VNTG' rec_modify_by , rec_modify_date, rec_insert_date ,NULL mdm_ins_date ,NULL mdm_last_mod_date ,NULL mdm_eff_end_date FROM incr_active_updt_vw cross join df_exp_date")
+
+val rule5=spark.sql("INSERT INTO ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent_temp (SELECT distinct * FROM ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent idl left anti join ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent_temp tmp on idl.customer_id=tmp.customer_id and idl.address_id=tmp.address_id where type='OHTDDD_EXEMPTION')")
+rule5.createOrReplaceTempView("incremental_active_vw")
+
+
+val rule6=spark.sql("INSERT INTO ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent_temp (SELECT distinct * FROM ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent idl where type <> 'OHTDDD_EXEMPTION')")
+
+val rule7=spark.sql("TRUNCATE TABLE ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent")
+
+val rule8=spark.sql("INSERT INTO ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent (SELECT distinct * FROM ALL_ALL_E_GBL_CUSTOMER.idl_mdm_consent_temp)")
+

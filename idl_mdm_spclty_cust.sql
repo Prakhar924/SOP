@@ -1,0 +1,13 @@
+
+spark.sql("""select distinct  mdm_attrib_type,spec.description,mdm_status_cd,trim(mdm_party_id) mdm_party_id,mdm_ins_dt,mdm_last_mod_dt,mdm_eff_end_dt from ALL_ALL_R_GBL_MDM.lnd_cdw_party_n_prof prof ,ALL_ALL_E_GBL_CUSTOMER.idl_mdm_spclty spec where trim(prof.mdm_attrib_value) = trim(spec.code) and mdm_attrib_type in ('BOARD_SPECIALTY','FIELD_FORCE_SPECIALTY','MII_OTHER5','NOVARTIS_SPECIALTY','OTHER4','OTHER5','OTHER6','OTHER7','OTHER8','OTHER9','PRACTICE_AREA','PRIMARY','SECONDARY','TERTIARY') and mdm_party_id is not null 
+minus 
+select type, value, status, customer_id, mdm_ins_date, mdm_last_mod_date, mdm_eff_end_date from all_all_e_gbl_customer.idl_mdm_spclty_cust """).createOrReplaceTempView("idl_mdm_spclty_cust")
+
+//below query using fetch insert and update records 
+
+spark.sql("select distinct xref.* from ALL_ALL_R_GBL_MDM.lnd_cdw_party_n_prof xref left anti join idl_mdm_spclty_cust idl on trim(xref.mdm_party_id)=trim(idl.mdm_party_id) and  xref.mdm_attrib_type in ('BOARD_SPECIALTY','FIELD_FORCE_SPECIALTY','MII_OTHER5','NOVARTIS_SPECIALTY','OTHER4','OTHER5','OTHER6','OTHER7','OTHER8','OTHER9','PRACTICE_AREA','PRIMARY','SECONDARY','TERTIARY') and xref.mdm_party_id is not null union all select distinct xref.* from ALL_ALL_R_GBL_MDM.lnd_cdw_party_n_prof xref join idl_mdm_spclty_cust idl on trim(xref.mdm_party_id)=trim(idl.mdm_party_id)").createOrReplaceTempView("lnd_cdw_party_n_prof")
+
+
+
+spark.sql("""insert into ALL_ALL_R_GBL_MDM.stg_mdm_spclty_cust select distinct  mdm_attrib_type,spec.description,mdm_status_cd,trim(mdm_party_id) mdm_party_id,mdm_ins_dt,mdm_last_mod_dt,mdm_eff_end_dt,prof.rec_insert_date,'10223' batch_id,'MDM','Y','' from ALL_ALL_R_GBL_MDM.lnd_cdw_party_n_prof prof ,ALL_ALL_E_GBL_CUSTOMER.idl_mdm_spclty spec where trim(prof.mdm_attrib_value) = trim(spec.code) and mdm_attrib_type in ('BOARD_SPECIALTY','FIELD_FORCE_SPECIALTY','MII_OTHER5','NOVARTIS_SPECIALTY','OTHER4','OTHER5','OTHER6','OTHER7','OTHER8','OTHER9','PRACTICE_AREA','PRIMARY','SECONDARY','TERTIARY') and mdm_party_id is not null  union all  select mdm_attrib_type,spec.description,mdm_status_cd,trim(mdm_party_id) mdm_party_id,mdm_ins_dt,mdm_last_mod_dt,mdm_eff_end_dt,prof.rec_insert_date,'10223' batch_id,'MDM','E','BAD RECORD: NO MDM PARTY ID' from ALL_ALL_R_GBL_MDM.lnd_cdw_party_n_prof prof,ALL_ALL_E_GBL_CUSTOMER.idl_mdm_spclty spec where trim(prof.mdm_attrib_value) = trim(spec.code) and mdm_attrib_type  in ('BOARD_SPECIALTY','FIELD_FORCE_SPECIALTY','MII_OTHER5','NOVARTIS_SPECIALTY','OTHER4','OTHER5','OTHER6','OTHER7','OTHER8','OTHER9','PRACTICE_AREA','PRIMARY','SECONDARY','TERTIARY') and mdm_party_id is null """)
+
